@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smart Operator Assistant</title>
+<style>
+:root{
+  --yellow:#FFCD11; --black:#151515; --panel:#1f1f1f; --panel2:#272727;
+  --line:#3a3a3a; --text:#f2f2ee; --muted:#a8a8a0;
+  --ok:#3fae5a; --warn:#e8a33d; --crit:#e4572e;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  box-sizing:border-box;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  background:var(--black); color:var(--text);
+  font-family:"Arial Narrow",Arial,Helvetica,sans-serif;
+  display:flex; flex-direction:column; height:100%; overflow:hidden;
+}
+button{font-family:inherit;}
+h1,h2,h3{margin:0 0 8px; font-weight:800; letter-spacing:.3px;}
+.hidden{display:none !important;}
+
+/* ---- Safety Strip ---- */
+#strip{
+  flex:0 0 auto; background:var(--panel2); border-bottom:3px solid var(--yellow);
+  display:flex; align-items:center; gap:14px; padding:10px 14px;
+  padding-top:calc(10px + env(safe-area-inset-top,0px));
+  overflow-x:auto; white-space:nowrap;
+}
+#strip .machine{font-weight:800; color:var(--yellow); font-size:15px;}
+.pill{
+  display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:4px;
+  font-weight:700; font-size:13px; background:var(--panel); border:1px solid var(--line);
+}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--ok);flex:0 0 auto;}
+.pill.alert{background:var(--crit); border-color:var(--crit); animation:pulse 1s infinite;}
+.pill.alert .dot{background:#fff;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.55;}}
+#alertBanner{
+  flex:0 0 auto; background:var(--crit); color:#fff; font-weight:800; text-align:center;
+  padding:10px; display:none; font-size:15px;
+}
+#alertBanner.show{display:block;}
+
+/* ---- Content ---- */
+#content{flex:1 1 auto; overflow-y:auto; padding:16px; padding-bottom:8px;}
+.card{
+  background:var(--panel); border:1px solid var(--line); border-radius:6px;
+  padding:16px; margin-bottom:14px;
+}
+.progress-outer{background:var(--panel2); border-radius:6px; height:22px; overflow:hidden; border:1px solid var(--line);}
+.progress-inner{background:var(--yellow); height:100%; transition:width .4s;}
+.milestone{display:flex; align-items:center; gap:8px; padding:6px 0; font-size:14px;}
+.milestone .mk{width:18px;height:18px;border-radius:50%;border:2px solid var(--muted);flex:0 0 auto;}
+.milestone.done .mk{background:var(--ok);border-color:var(--ok);}
+.milestone.active .mk{background:var(--yellow);border-color:var(--yellow);}
+.btn{
+  background:var(--yellow); color:#151515; border:none; border-radius:5px;
+  font-weight:800; padding:14px 18px; font-size:15px; cursor:pointer; min-height:48px;
+}
+.btn.secondary{background:var(--panel2); color:var(--text); border:1px solid var(--line);}
+.btn.crit{background:var(--crit); color:#fff;}
+.btn.small{padding:8px 12px; font-size:13px; min-height:36px;}
+.row{display:flex; gap:10px; flex-wrap:wrap;}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.tags{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
+.tag{background:var(--panel2); border:1px solid var(--line); border-radius:20px; padding:8px 14px; font-size:13px; cursor:pointer;}
+.tag.sel{background:var(--yellow); color:#151515; border-color:var(--yellow); font-weight:700;}
+.stat{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:14px;}
+.stat:last-child{border-bottom:none;}
+.stat b{color:var(--yellow);}
+.logline{font-size:13px; color:var(--muted); padding:6px 0; border-bottom:1px solid var(--line);}
+.logline b{color:var(--text);}
+.bar{display:flex; align-items:flex-end; gap:6px; height:70px; margin-top:8px;}
+.bar div{flex:1; background:var(--yellow); border-radius:2px 2px 0 0; min-height:2px;}
+video-mod{display:block;}
+.module{background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:10px;}
+.module .dur{font-size:12px; color:var(--muted);}
+select,input[type=text]{background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:5px; padding:8px; font-size:14px;}
+
+/* ---- Bottom nav ---- */
+#nav{
+  flex:0 0 auto; display:flex; border-top:2px solid var(--line); background:var(--panel);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+#nav button{
+  flex:1; background:none; border:none; color:var(--muted); padding:12px 4px; font-size:12px;
+  font-weight:700; border-top:3px solid transparent; cursor:pointer;
+}
+#nav button.active{color:var(--yellow); border-top-color:var(--yellow);}
+
+::-webkit-scrollbar{width:8px;} ::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px;}
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="machine">CAT320-EXC-014</span>
+  <span class="pill" id="linkPill"><span class="dot"></span>LOCAL SIM</span>
+  <span class="pill" id="seatbeltPill"><span class="dot"></span>SEATBELT</span>
+  <span class="pill" id="proxPill"><span class="dot"></span>PROXIMITY</span>
+  <span class="pill" id="loadPill"><span class="dot"></span>LOAD</span>
+  <span class="pill" id="idlePill"><span class="dot"></span>IDLE</span>
+  <select id="roleSelect" class="pill" style="cursor:pointer;" onchange="setRole(this.value)">
+    <option value="operator">Operator</option>
+    <option value="supervisor">Supervisor</option>
+  </select>
+  <span class="pill" id="shiftClock" style="margin-left:auto;">00:00</span>
+</div>
+<div id="alertBanner"></div>
+
+<div id="content"></div>
+
+<div id="nav">
+  <button data-tab="dash" class="active">Dashboard</button>
+  <button data-tab="safety">Safety</button>
+  <button data-tab="train">Training</button>
+  <button data-tab="analytics">Analytics</button>
+  <button data-tab="sim">Sim</button>
+</div>
+
+<script>
+/* ============ STATE ============ */
+const state = {
+  tick: 0,
+  telemetry: { rpm:1200, speed:0, seatbelt:true, proxDist:12, loadKg:2000, loadLimit:5000 },
+  idleSeconds:0,
+  shiftSeconds:0,
+  progress:62,
+  milestones:[
+    {label:"Move 300 m3 soil", status:"done"},
+    {label:"Level Zone A", status:"done"},
+    {label:"Level Zone B", status:"active"},
+    {label:"Compact Zone C", status:"pending"}
+  ],
+  incidents:[],
+  bookings:[],
+  trainerSlots:[
+    {id:1, label:"Instructor — R. Fernandes", time:"Tomorrow 2:00 PM", booked:false},
+    {id:2, label:"Peer — OP-1042", time:"Tomorrow 4:00 PM", booked:false}
+  ],
+  role:'operator',
+  alerts:[],
+  simRunning:true,
+  activeAlert:null,
+  selectedTag:null,
+  history:{idle:[8,15,22,10,30,18,12], flags:[1,0,2,1,3,0,1]}
+};
+
+/* ============ ANOMALY RULES ============ */
+function evaluate(t){
+  const flags=[];
+  if(t.rpm>800 && t.speed<0.5 && t.loadKg<200){
+    state.idleSeconds+=1.5;
+    if(state.idleSeconds>60 && state.idleSeconds<62) flags.push({cat:"idle",sev:"MEDIUM",msg:"Excessive idling detected ("+Math.floor(state.idleSeconds)+"s)"});
+  } else { state.idleSeconds=0; }
+
+  if(t.loadKg > t.loadLimit*0.95 && t.loadKg<=t.loadLimit)
+    flags.push({cat:"load",sev:"HIGH",msg:"Load near limit ("+t.loadKg+"kg)"});
+  if(t.loadKg > t.loadLimit)
+    flags.push({cat:"load",sev:"CRITICAL",msg:"Load limit exceeded ("+t.loadKg+"kg)"});
+
+  if(t.proxDist < 3) flags.push({cat:"proximity",sev:"CRITICAL",msg:"Personnel "+t.proxDist.toFixed(1)+"m rear-left"});
+  else if(t.proxDist < 6) flags.push({cat:"proximity",sev:"MEDIUM",msg:"Object "+t.proxDist.toFixed(1)+"m nearby"});
+
+  if(!t.seatbelt) flags.push({cat:"seatbelt",sev:"HIGH",msg:"Seatbelt not fastened"});
+
+  return flags;
+}
+
+/* ============ SIMULATOR TICK ============ */
+function tick(){
+  if(!state.simRunning || state.live) return;
+  state.tick++;
+  state.shiftSeconds += 1.5;
+  const t = state.telemetry;
+  if(state.forceIdle){
+    t.speed = 0; t.loadKg = 0; t.rpm = 900 + Math.random()*100;
+  } else {
+    t.speed = Math.max(0, t.speed + (Math.random()-0.5)*2);
+    if(t.speed>20) t.speed=20;
+    t.rpm = 1000 + Math.random()*600;
+    if(state.tick % 12 === 0){ t.loadKg = 1500 + Math.random()*2000; }
+  }
+  t.proxDist = Math.max(0.5, t.proxDist + (Math.random()-0.5)*1.5);
+  if(t.proxDist>15) t.proxDist=15;
+
+  const flags = evaluate(t);
+  const crit = flags.find(f=>f.sev==="CRITICAL") || flags.find(f=>f.sev==="HIGH");
+  state.activeAlert = crit || null;
+  if(flags.length){
+    flags.forEach(f=> state.alerts.unshift({...f, time:new Date().toLocaleTimeString()}) );
+    state.alerts = state.alerts.slice(0,30);
+  }
+  render();
+}
+setInterval(tick, 1500);
+
+/* ============ LIVE LINK TO BACKEND (optional) ============
+   When served by the backend (http://localhost:4000) the UI streams real telemetry + alerts over
+   WebSocket and sends Sim-tab actions to the server. Opened as a plain file, or if the server is
+   unreachable, it falls back to the built-in local simulator above. */
+const canLink = location.protocol.startsWith('http');
+const tokens = {};
+async function api(method, path, body, role){
+  role = role || 'supervisor';
+  if(!tokens[role]){
+    const r = await fetch('/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Demo '+role,role})});
+    tokens[role] = (await r.json()).token;
+  }
+  const res = await fetch('/api/v1'+path,{method,headers:{'Content-Type':'application/json','Authorization':'Bearer '+tokens[role]},body: body?JSON.stringify(body):undefined});
+  return res.json();
+}
+function stillActive(a){
+  const t = state.telemetry;
+  if(a.cat==='seatbelt') return !t.seatbelt;
+  if(a.cat==='load') return t.loadKg > t.loadLimit*0.95;
+  if(a.cat==='proximity') return t.proxDist < 3;
+  return false;
+}
+function connectLive(){
+  if(!canLink) return;
+  let ws;
+  try{ ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws/telemetry'); }catch(e){ return; }
+  ws.onmessage = ev => {
+    const msg = JSON.parse(ev.data), f = msg.frame, alerts = msg.alerts || [];
+    state.live = true; state.simRunning = true;
+    const t = state.telemetry;
+    t.rpm = f.engine.rpm; t.speed = f.motion.speed_kmh; t.seatbelt = f.safety.seatbelt_fastened;
+    t.proxDist = f.safety.proximity[0] ? f.safety.proximity[0].distance_m : 15;
+    t.loadKg = f.hydraulics.load_kg; t.loadLimit = f.hydraulics.load_limit_kg;
+    state.idleSeconds = msg.idle_seconds || 0;
+    state.shiftSeconds += 1.5;
+    alerts.forEach(a => state.alerts.unshift({cat:a.category, sev:a.severity, msg:a.message, time:new Date(a.timestamp).toLocaleTimeString()}));
+    state.alerts = state.alerts.slice(0,30);
+    const fresh = alerts.find(a=>a.severity==='CRITICAL') || alerts.find(a=>a.severity==='HIGH');
+    if(fresh) state.activeAlert = {cat:fresh.category, sev:fresh.severity, msg:fresh.message};
+    if(state.activeAlert && !stillActive(state.activeAlert)) state.activeAlert = null;
+    render();
+  };
+  ws.onclose = () => { state.live = false; render(); setTimeout(connectLive, 3000); };
+  ws.onerror = () => { try{ ws.close(); }catch(e){} };
+}
+
+/* ============ PERSISTENCE (per-viewer, localStorage) ============ */
+function save(){
+  try{
+    localStorage.setItem('soa_progress', JSON.stringify(state.progress));
+    localStorage.setItem('soa_milestones', JSON.stringify(state.milestones));
+    localStorage.setItem('soa_incidents', JSON.stringify(state.incidents));
+    localStorage.setItem('soa_bookings', JSON.stringify(state.bookings));
+    localStorage.setItem('soa_role', state.role);
+  }catch(e){ /* storage unavailable — demo still works, just won't persist */ }
+}
+function load(){
+  try{
+    const p = localStorage.getItem('soa_progress'); if(p!==null) state.progress = JSON.parse(p);
+    const m = localStorage.getItem('soa_milestones'); if(m) state.milestones = JSON.parse(m);
+    const i = localStorage.getItem('soa_incidents'); if(i) state.incidents = JSON.parse(i);
+    const b = localStorage.getItem('soa_bookings'); if(b) state.bookings = JSON.parse(b);
+    const r = localStorage.getItem('soa_role'); if(r) state.role = r;
+  }catch(e){}
+}
+
+/* ============ ROLE (stand-in for auth) ============ */
+function setRole(role){
+  state.role = role;
+  save();
+  applyRoleVisibility();
+  render();
+}
+function applyRoleVisibility(){
+  document.getElementById('roleSelect').value = state.role;
+  const simBtn = document.querySelector('#nav button[data-tab="sim"]');
+  const canSeeSim = state.role === 'supervisor';
+  simBtn.style.display = canSeeSim ? '' : 'none';
+  if(!canSeeSim && currentTab === 'sim'){ currentTab='dash'; document.querySelector('#nav button[data-tab="dash"]').click(); }
+}
+function injectProximity(){ if(state.live){ api('POST','/sim/inject/proximity').catch(()=>{}); return; } state.telemetry.proxDist = 2.2; }
+function injectSeatbelt(){ if(state.live){ api('POST','/sim/inject/seatbelt').catch(()=>{}); return; } state.telemetry.seatbelt = false; setTimeout(()=>{state.telemetry.seatbelt=true; render();},8000); }
+function injectIdle(){
+  if(state.live){ api('POST','/sim/inject/idle').catch(()=>{}); return; }
+  state.telemetry.speed=0; state.telemetry.loadKg=0; state.idleSeconds=0;
+  state.forceIdle=true;
+  setTimeout(()=>{ state.forceIdle=false; render(); }, 90000);
+}
+function injectLoad(){ if(state.live){ api('POST','/sim/inject/overload').catch(()=>{}); return; } state.telemetry.loadKg = state.telemetry.loadLimit + 400; }
+function toggleSim(){
+  if(state.live){ api('POST','/sim/toggle').then(r=>{ state.simRunning = r.running; render(); }).catch(()=>{}); return; }
+  state.simRunning = !state.simRunning; render();
+}
+function bumpProgress(){
+  state.progress = Math.min(100, state.progress+8);
+  const next = state.milestones.find(m=>m.status==="active");
+  if(next && state.progress>=((state.milestones.indexOf(next)+1)*25)){
+    next.status="done";
+    const upcoming = state.milestones.find(m=>m.status==="pending");
+    if(upcoming) upcoming.status="active";
+  }
+  save();
+  render();
+}
+
+/* ============ INCIDENT LOGGING ============ */
+function selectTag(tag, el){
+  state.selectedTag = tag;
+  document.querySelectorAll('.tag').forEach(e=>e.classList.remove('sel'));
+  el.classList.add('sel');
+}
+function logIncident(type){
+  state.incidents.unshift({
+    type, tag: state.selectedTag || "unspecified",
+    time: new Date().toLocaleTimeString()
+  });
+  if(state.live) api('POST','/incidents',{type, tag: state.selectedTag || 'unspecified'}, 'operator').catch(()=>{});
+  state.selectedTag = null;
+  save();
+  render();
+}
+function bookSlot(id){
+  const slot = state.trainerSlots.find(s=>s.id===id);
+  if(!slot || slot.booked) return;
+  slot.booked = true;
+  state.bookings.unshift({slotLabel:slot.label, time:slot.time, bookedAt:new Date().toLocaleString()});
+  save();
+  render();
+}
+
+/* ============ ETA CALC ============ */
+function eta(){
+  const remaining = 100 - state.progress;
+  const baseRateUnitsPerMin = 0.7; // % per minute, illustrative
+  const hoursIn = state.shiftSeconds/3600;
+  const fatigue = hoursIn>6 ? 0.85 : 1.0;
+  const mins = Math.max(0, remaining / (baseRateUnitsPerMin*fatigue));
+  const h = Math.floor(mins/60), m = Math.round(mins%60);
+  return h+"h "+m+"m";
+}
+
+/* ============ RENDER ============ */
+function fmtClock(sec){
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=Math.floor(sec%60);
+  return [h,m,s].map(v=>String(v).padStart(2,'0')).join(':');
+}
+
+function renderStrip(){
+  const t = state.telemetry;
+  const sb = document.getElementById('seatbeltPill');
+  sb.className = 'pill' + (!t.seatbelt ? ' alert' : '');
+  const px = document.getElementById('proxPill');
+  px.className = 'pill' + (t.proxDist<6 ? ' alert' : '');
+  const ld = document.getElementById('loadPill');
+  ld.className = 'pill' + (t.loadKg>t.loadLimit*0.95 ? ' alert' : '');
+  const idlePill = document.getElementById('idlePill');
+  idlePill.className = 'pill' + (state.idleSeconds>60 ? ' alert' : '');
+  idlePill.innerHTML = '<span class="dot"></span>IDLE '+Math.floor(state.idleSeconds)+'s';
+  const lp = document.getElementById('linkPill');
+  lp.innerHTML = '<span class="dot"></span>' + (state.live ? 'LIVE · SERVER' : 'LOCAL SIM');
+  document.getElementById('shiftClock').textContent = fmtClock(state.shiftSeconds);
+
+  const banner = document.getElementById('alertBanner');
+  if(state.activeAlert){
+    banner.textContent = "⚠ "+state.activeAlert.msg;
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
+}
+
+function tabDash(){
+  return `
+  <div class="card">
+    <h3>Today's Work Order — Grading, Zone C</h3>
+    <div class="progress-outer"><div class="progress-inner" style="width:${state.progress}%"></div></div>
+    <div style="margin-top:6px;font-size:13px;color:var(--muted)">${state.progress}% complete · Est. remaining: <b style="color:var(--yellow)">${eta()}</b></div>
+  </div>
+  <div class="card">
+    <h3>Shift Milestones</h3>
+    ${state.milestones.map(m=>`<div class="milestone ${m.status==='done'?'done':m.status==='active'?'active':''}"><span class="mk"></span>${m.label}</div>`).join('')}
+    <div style="margin-top:12px;"><button class="btn" onclick="bumpProgress()">MARK PROGRESS</button></div>
+  </div>`;
+}
+
+function tabSafety(){
+  const t = state.telemetry;
+  return `
+  <div class="card">
+    <div class="grid2">
+      <div class="stat"><span>Seatbelt</span><b style="color:${t.seatbelt?'var(--ok)':'var(--crit)'}">${t.seatbelt?'FASTENED':'UNFASTENED'}</b></div>
+      <div class="stat"><span>Nearest object</span><b>${t.proxDist.toFixed(1)} m</b></div>
+      <div class="stat"><span>Engine RPM</span><b>${Math.round(t.rpm)}</b></div>
+      <div class="stat"><span>Hydraulic load</span><b>${Math.round(t.loadKg)} / ${t.loadLimit} kg</b></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Log an Event</h3>
+    <div class="tags">
+      ${["Struck object","Slip/trip","Visibility","Equipment fault","Other"].map(tag=>`<span class="tag" onclick="selectTag('${tag}',this)">${tag}</span>`).join('')}
+    </div>
+    <div class="row" style="margin-top:14px;">
+      ${state.role==='operator' ? `
+        <button class="btn secondary" onclick="logIncident('Near-miss')">LOG NEAR-MISS</button>
+        <button class="btn crit" onclick="logIncident('Incident')">LOG INCIDENT</button>
+      ` : `<div class="logline">Supervisors view logs but don't file them — switch to Operator to log an event.</div>`}
+    </div>
+  </div>
+  <div class="card">
+    <h3>Recent Log Entries</h3>
+    ${state.incidents.length? state.incidents.slice(0,6).map(i=>`<div class="logline">${i.time} — <b>${i.type}</b> · ${i.tag}</div>`).join('') : '<div class="logline">No entries this shift.</div>'}
+  </div>`;
+}
+
+function tabTrain(){
+  const mods=[["Seatbelt policy","2 min"],["Idle reduction basics","4 min"],["Hydraulic load limits","3 min left"],["Bucket attach checklist","guide"]];
+  return `
+  <div class="card">
+    <h3>Continue Learning</h3>
+    <div class="module"><span>Hydraulic Load Limits</span><span class="dur">3 min left ▶</span></div>
+  </div>
+  <div class="card">
+    <h3>Bite-Sized Modules</h3>
+    ${mods.map(m=>`<div class="module"><span>${m[0]}</span><span class="dur">${m[1]}</span></div>`).join('')}
+  </div>
+  <div class="card">
+    <h3>Book a Session</h3>
+    ${state.trainerSlots.filter(s=>!s.booked).map(s=>`
+      <div class="module"><span>${s.label}<br><span class="dur">${s.time}</span></span>
+      <button class="btn small" onclick="bookSlot(${s.id})">BOOK</button></div>`).join('') || '<div class="logline">No open slots — all booked.</div>'}
+  </div>
+  <div class="card">
+    <h3>Your Bookings</h3>
+    ${state.bookings.length? state.bookings.map(b=>`<div class="logline"><b>${b.slotLabel}</b> · ${b.time}</div>`).join('') : '<div class="logline">No sessions booked yet.</div>'}
+  </div>`;
+}
+
+function tabAnalytics(){
+  const idleFlags = state.alerts.filter(a=>a.cat==='idle').length;
+  const aggFlags = state.alerts.filter(a=>a.cat==='proximity').length;
+  const loadFlags = state.alerts.filter(a=>a.cat==='load').length;
+  const maxH = Math.max(...state.history.idle,1);
+  return `
+  <div class="card">
+    <h3>This Shift</h3>
+    <div class="stat"><span>Idle-time flags</span><b>${idleFlags}</b></div>
+    <div class="stat"><span>Proximity flags</span><b>${aggFlags}</b></div>
+    <div class="stat"><span>Load warnings</span><b>${loadFlags}</b></div>
+  </div>
+  <div class="card">
+    <h3>Idle Minutes — Last 7 Shifts</h3>
+    <div class="bar">${state.history.idle.map(v=>`<div style="height:${(v/maxH)*100}%" title="${v}m"></div>`).join('')}</div>
+  </div>
+  <div class="card">
+    <h3>Flagged Event Log</h3>
+    ${state.alerts.length? state.alerts.slice(0,8).map(a=>`<div class="logline">${a.time} — <b>${a.sev}</b> · ${a.msg}</div>`).join('') : '<div class="logline">No flags yet — trigger one from the Sim tab.</div>'}
+  </div>`;
+}
+
+function tabSim(){
+  return `
+  <div class="card">
+    <h3>Telemetry Stream</h3>
+    <div class="row">
+      <button class="btn ${state.simRunning?'':'secondary'}" onclick="toggleSim()">${state.simRunning?'● RUNNING — tap to pause':'○ PAUSED — tap to run'}</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Inject Events</h3>
+    <div class="row">
+      <button class="btn secondary" onclick="injectProximity()">Proximity Hazard</button>
+      <button class="btn secondary" onclick="injectSeatbelt()">Seatbelt Unbuckle</button>
+      <button class="btn secondary" onclick="injectIdle()">Excess Idle${(state.forceIdle||(state.live&&state.idleSeconds>0))?' (running… '+Math.floor(state.idleSeconds)+'s)':''}</button>
+      <button class="btn secondary" onclick="injectLoad()">Overload</button>
+    </div>
+    ${(state.forceIdle||(state.live&&state.idleSeconds>0))?`<div style="margin-top:10px;font-size:13px;color:var(--muted)">Idle timer needs 60s continuous idle to flag — currently at <b style="color:var(--yellow)">${Math.floor(state.idleSeconds)}s</b>.</div>`:''}
+  </div>
+  <div class="card">
+    <h3>Live Frame</h3>
+    <pre style="white-space:pre-wrap;font-size:12px;color:var(--muted);margin:0;">${JSON.stringify(state.telemetry,null,2)}</pre>
+  </div>`;
+}
+
+const tabs = {dash:tabDash, safety:tabSafety, train:tabTrain, analytics:tabAnalytics, sim:tabSim};
+let currentTab = 'dash';
+
+function render(){
+  renderStrip();
+  document.getElementById('content').innerHTML = tabs[currentTab]();
+}
+
+document.getElementById('nav').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-tab]');
+  if(!btn) return;
+  currentTab = btn.dataset.tab;
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+});
+
+load();
+applyRoleVisibility();
+render();
+connectLive();
+</script>
+</body>
+</html>
