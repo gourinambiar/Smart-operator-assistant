@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smart Operator Assistant</title>
+<style>
+:root{
+  --yellow:#FFCD11; --black:#151515; --panel:#1f1f1f; --panel2:#272727;
+  --line:#3a3a3a; --text:#f2f2ee; --muted:#a8a8a0;
+  --ok:#3fae5a; --warn:#e8a33d; --crit:#e4572e;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  box-sizing:border-box;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  background:var(--black); color:var(--text);
+  font-family:"Arial Narrow",Arial,Helvetica,sans-serif;
+  display:flex; flex-direction:column; height:100%; overflow:hidden;
+}
+button{font-family:inherit;}
+h1,h2,h3{margin:0 0 8px; font-weight:800; letter-spacing:.3px;}
+.hidden{display:none !important;}
+
+/* ---- Safety Strip ---- */
+#strip{
+  flex:0 0 auto; background:var(--panel2); border-bottom:3px solid var(--yellow);
+  display:flex; align-items:center; gap:14px; padding:10px 14px;
+  padding-top:calc(10px + env(safe-area-inset-top,0px));
+  overflow-x:auto; white-space:nowrap;
+}
+#strip .machine{font-weight:800; color:var(--yellow); font-size:15px;}
+.pill{
+  display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:4px;
+  font-weight:700; font-size:13px; background:var(--panel); border:1px solid var(--line);
+}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--ok);flex:0 0 auto;}
+.pill.alert{background:var(--crit); border-color:var(--crit); animation:pulse 1s infinite;}
+.pill.alert .dot{background:#fff;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.55;}}
+#alertBanner{
+  flex:0 0 auto; background:var(--crit); color:#fff; font-weight:800; text-align:center;
+  padding:10px; display:none; font-size:15px;
+}
+#alertBanner.show{display:block;}
+
+/* ---- Content ---- */
+#content{flex:1 1 auto; overflow-y:auto; padding:16px; padding-bottom:8px;}
+.card{
+  background:var(--panel); border:1px solid var(--line); border-radius:6px;
+  padding:16px; margin-bottom:14px;
+}
+.progress-outer{background:var(--panel2); border-radius:6px; height:22px; overflow:hidden; border:1px solid var(--line);}
+.progress-inner{background:var(--yellow); height:100%; transition:width .4s;}
+.milestone{display:flex; align-items:center; gap:8px; padding:6px 0; font-size:14px;}
+.milestone .mk{width:18px;height:18px;border-radius:50%;border:2px solid var(--muted);flex:0 0 auto;}
+.milestone.done .mk{background:var(--ok);border-color:var(--ok);}
+.milestone.active .mk{background:var(--yellow);border-color:var(--yellow);}
+.btn{
+  background:var(--yellow); color:#151515; border:none; border-radius:5px;
+  font-weight:800; padding:14px 18px; font-size:15px; cursor:pointer; min-height:48px;
+}
+.btn.secondary{background:var(--panel2); color:var(--text); border:1px solid var(--line);}
+.btn.crit{background:var(--crit); color:#fff;}
+.btn.small{padding:8px 12px; font-size:13px; min-height:36px;}
+.row{display:flex; gap:10px; flex-wrap:wrap;}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.tags{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
+.tag{background:var(--panel2); border:1px solid var(--line); border-radius:20px; padding:8px 14px; font-size:13px; cursor:pointer;}
+.tag.sel{background:var(--yellow); color:#151515; border-color:var(--yellow); font-weight:700;}
+.stat{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:14px;}
+.stat:last-child{border-bottom:none;}
+.stat b{color:var(--yellow);}
+.logline{font-size:13px; color:var(--muted); padding:6px 0; border-bottom:1px solid var(--line);}
+.logline b{color:var(--text);}
+.bar{display:flex; align-items:flex-end; gap:6px; height:70px; margin-top:8px;}
+.bar div{flex:1; background:var(--yellow); border-radius:2px 2px 0 0; min-height:2px;}
+video-mod{display:block;}
+.module{background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:10px;}
+.module .dur{font-size:12px; color:var(--muted);}
+select,input[type=text]{background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:5px; padding:8px; font-size:14px;}
+
+/* ---- Bottom nav ---- */
+#nav{
+  flex:0 0 auto; display:flex; border-top:2px solid var(--line); background:var(--panel);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+#nav button{
+  flex:1; background:none; border:none; color:var(--muted); padding:12px 4px; font-size:12px;
+  font-weight:700; border-top:3px solid transparent; cursor:pointer;
+}
+#nav button.active{color:var(--yellow); border-top-color:var(--yellow);}
+
+::-webkit-scrollbar{width:8px;} ::-webkit-scrollbar-thumb{background:var(--line); border-radius:4px;}
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="machine">CAT320-EXC-014</span>
+  <span class="pill" id="seatbeltPill"><span class="dot"></span>SEATBELT</span>
+  <span class="pill" id="proxPill"><span class="dot"></span>PROXIMITY</span>
+  <span class="pill" id="loadPill"><span class="dot"></span>LOAD</span>
+  <span class="pill" id="idlePill"><span class="dot"></span>IDLE</span>
+  <select id="roleSelect" class="pill" style="cursor:pointer;" onchange="setRole(this.value)">
+    <option value="operator">Operator</option>
+    <option value="supervisor">Supervisor</option>
+  </select>
+  <span class="pill" id="shiftClock" style="margin-left:auto;">00:00</span>
+</div>
+<div id="alertBanner"></div>
+
+<div id="content"></div>
+
+<div id="nav">
+  <button data-tab="dash" class="active">Dashboard</button>
+  <button data-tab="safety">Safety</button>
+  <button data-tab="train">Training</button>
+  <button data-tab="analytics">Analytics</button>
+  <button data-tab="sim">Sim</button>
+</div>
+
+<script>
+/* ============ STATE ============ */
+// Relative-offset helper so demo trainer/peer slots carry a real timestamp
+// (needed to actually schedule a reminder against them), not just display text.
+function futureAt(daysFromNow, hour, minute){
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  d.setHours(hour, minute, 0, 0);
+  return d.getTime();
+}
+
+const state = {
+  tick: 0,
+  telemetry: { rpm:1200, speed:0, seatbelt:true, proxDist:12, loadKg:2000, loadLimit:5000 },
+  idleSeconds:0,
+  shiftSeconds:0,
+  progress:62,
+  milestones:[
+    {label:"Move 300 m3 soil", status:"done"},
+    {label:"Level Zone A", status:"done"},
+    {label:"Level Zone B", status:"active"},
+    {label:"Compact Zone C", status:"pending"}
+  ],
+  incidents:[],
+  bookings:[],
+  trainerSlots:[
+    {id:1, label:"Instructor — R. Fernandes", time:"Tomorrow 9:00 AM", booked:false, atMs: futureAt(1,9,0)},
+    {id:2, label:"Instructor — A. Menon", time:"Tomorrow 2:00 PM", booked:false, atMs: futureAt(1,14,0)},
+    {id:3, label:"Instructor — K. Iyer", time:"Wed 11:00 AM", booked:false, atMs: futureAt(2,11,0)},
+    {id:4, label:"Instructor — R. Fernandes", time:"Thu 1:00 PM", booked:false, atMs: futureAt(3,13,0)},
+    {id:5, label:"Peer — OP-1042 (Suresh T.)", time:"Tomorrow 4:00 PM", booked:false, atMs: futureAt(1,16,0)},
+    {id:6, label:"Peer — OP-2078 (Divya N.)", time:"Wed 3:00 PM", booked:false, atMs: futureAt(2,15,0)},
+    {id:7, label:"Peer — OP-1155 (Karthik R.)", time:"Thu 10:00 AM", booked:false, atMs: futureAt(3,10,0)},
+    {id:8, label:"Peer — OP-1042 (Suresh T.)", time:"Fri 9:30 AM", booked:false, atMs: futureAt(4,9,30)}
+  ],
+  role:'operator',
+  alerts:[],
+  simRunning:true,
+  activeAlert:null,
+  selectedTag:null,
+  history:{idle:[8,15,22,10,30,18,12], flags:[1,0,2,1,3,0,1]},
+  scenarioCategory:'',
+  scenarioSelected:'',
+  scenarioResult:null,
+  scenarioRuns:[],
+  scenarioTrainingLog:[],
+  scenarioAnalyticsLog:[],
+  workOrderStatus:null,
+  workOrderTitle:null,
+  workOrderEtaOverride:null,
+  sessionReminder:null
+};
+
+/* ============ SCENARIO LIBRARY (57 synthetic test scenarios) ============ */
+/* Embedded so it works whether this file is opened directly or served —
+   see dashboard_test_scenarios.xlsx / scenarios.json for the source data. */
+const SCENARIOS = JSON.parse(`{"workOrders":[{"scenario_id":"WO-001","equipment_id":"CAT320-EXC-014","operator":"Meera S.","task":"Demolition Cleanup","zone":"Zone A","total_volume_m3":200,"percent_complete":47,"est_remaining_min":64,"status":"Ahead of Schedule","expected_ui_behavior":"Progress bar amber/yellow, milestones below current step remain grey/unfilled"},{"scenario_id":"WO-002","equipment_id":"CAT330-EXC-030","operator":"Divya N.","task":"Compaction","zone":"Zone A","total_volume_m3":150,"percent_complete":74,"est_remaining_min":10,"status":"On Track","expected_ui_behavior":"Progress bar yellow, in-progress milestone highlighted, next milestone pending"},{"scenario_id":"WO-003","equipment_id":"CAT320-EXC-015","operator":"Suresh T.","task":"Compaction","zone":"Zone E","total_volume_m3":800,"percent_complete":0,"est_remaining_min":145,"status":"Ahead of Schedule","expected_ui_behavior":"Progress bar amber/yellow, milestones below current step remain grey/unfilled"},{"scenario_id":"WO-004","equipment_id":"CAT320-EXC-015","operator":"Suresh T.","task":"Compaction","zone":"Zone D","total_volume_m3":200,"percent_complete":47,"est_remaining_min":209,"status":"On Track","expected_ui_behavior":"Progress bar amber/yellow, milestones below current step remain grey/unfilled"},{"scenario_id":"WO-005","equipment_id":"CAT336-EXC-021","operator":"Meera S.","task":"Excavation","zone":"Zone C","total_volume_m3":150,"percent_complete":32,"est_remaining_min":197,"status":"Delayed","expected_ui_behavior":"Progress bar amber/yellow, milestones below current step remain grey/unfilled"},{"scenario_id":"WO-006","equipment_id":"CAT315-EXC-009","operator":"Anitha V.","task":"Trenching","zone":"Zone A","total_volume_m3":150,"percent_complete":61,"est_remaining_min":156,"status":"Delayed","expected_ui_behavior":"Progress bar yellow, in-progress milestone highlighted, next milestone pending"},{"scenario_id":"WO-007","equipment_id":"CAT330-EXC-030","operator":"Priya M.","task":"Loading","zone":"Zone A","total_volume_m3":800,"percent_complete":5,"est_remaining_min":143,"status":"Delayed","expected_ui_behavior":"Progress bar amber/yellow, milestones below current step remain grey/unfilled"},{"scenario_id":"WO-008","equipment_id":"CAT330-EXC-030","operator":"Karthik R.","task":"Demolition Cleanup","zone":"Zone B","total_volume_m3":200,"percent_complete":5,"est_remaining_min":13,"status":"Just Started","expected_ui_behavior":"Progress bar amber/yellow, milestones below current step remain grey/unfilled"},{"scenario_id":"WO-009","equipment_id":"CAT320-EXC-014","operator":"Priya M.","task":"Grading","zone":"Zone B","total_volume_m3":800,"percent_complete":74,"est_remaining_min":73,"status":"Blocked - Awaiting Material","expected_ui_behavior":"Progress bar yellow, in-progress milestone highlighted, next milestone pending"},{"scenario_id":"WO-010","equipment_id":"CAT320-EXC-015","operator":"Meera S.","task":"Trenching","zone":"Zone C","total_volume_m3":800,"percent_complete":32,"est_remaining_min":173,"status":"Delayed","expected_ui_behavior":"Progress bar amber/yellow, milestones below current step remain grey/unfilled"},{"scenario_id":"WO-011","equipment_id":"CAT330-EXC-030","operator":"Arjun P.","task":"Compaction","zone":"Zone B","total_volume_m3":200,"percent_complete":100,"est_remaining_min":0,"status":"Complete","expected_ui_behavior":"Progress bar full green, 'MARK PROGRESS' button shows 'COMPLETE', milestone all green"},{"scenario_id":"WO-012","equipment_id":"CAT315-EXC-009","operator":"Divya N.","task":"Trenching","zone":"Zone D","total_volume_m3":800,"percent_complete":100,"est_remaining_min":0,"status":"Complete","expected_ui_behavior":"Progress bar full green, 'MARK PROGRESS' button shows 'COMPLETE', milestone all green"}],"safety":[{"scenario_id":"SAFE-001","equipment_id":"CAT336-EXC-021","operator":"Suresh T.","seatbelt_status":"Unfastened","proximity_status":"Clear","load_status":"Overload Warning","idle_time_s":0,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Load Alert - Overload Warning","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Load Alert - Overload Warning. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT336-EXC-021","seatbelt_fastened":false,"nearest_object_m":8.5,"load_kg":4850,"load_limit_kg":5000,"idle_seconds":0}},{"scenario_id":"SAFE-002","equipment_id":"CAT336-EXC-021","operator":"Divya N.","seatbelt_status":"Unfastened","proximity_status":"Clear","load_status":"Overload Warning","idle_time_s":600,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Load Alert - Overload Warning; Extended Idle Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Load Alert - Overload Warning; Extended Idle Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT336-EXC-021","seatbelt_fastened":false,"nearest_object_m":8.5,"load_kg":4850,"load_limit_kg":5000,"idle_seconds":600}},{"scenario_id":"SAFE-003","equipment_id":"CAT336-EXC-021","operator":"Arjun P.","seatbelt_status":"Unfastened","proximity_status":"Obstacle Detected","load_status":"Sensor Fault","idle_time_s":0,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Proximity Alert; Load Alert - Sensor Fault","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Proximity Alert; Load Alert - Sensor Fault. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT336-EXC-021","seatbelt_fastened":false,"nearest_object_m":1.8,"load_kg":null,"load_limit_kg":5000,"idle_seconds":0}},{"scenario_id":"SAFE-004","equipment_id":"CAT315-EXC-009","operator":"Priya M.","seatbelt_status":"Fastened","proximity_status":"Vehicle Detected <5m","load_status":"Sensor Fault","idle_time_s":600,"alert_triggered":"Yes","alert_type":"Proximity Alert; Load Alert - Sensor Fault; Extended Idle Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Proximity Alert; Load Alert - Sensor Fault; Extended Idle Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT315-EXC-009","seatbelt_fastened":true,"nearest_object_m":2.4,"load_kg":null,"load_limit_kg":5000,"idle_seconds":600}},{"scenario_id":"SAFE-005","equipment_id":"CAT320-EXC-014","operator":"Meera S.","seatbelt_status":"Fastened","proximity_status":"Worker Detected <10m","load_status":"Sensor Fault","idle_time_s":0,"alert_triggered":"Yes","alert_type":"Proximity Alert; Load Alert - Sensor Fault","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Proximity Alert; Load Alert - Sensor Fault. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT320-EXC-014","seatbelt_fastened":true,"nearest_object_m":4.5,"load_kg":null,"load_limit_kg":5000,"idle_seconds":0}},{"scenario_id":"SAFE-006","equipment_id":"CAT320-EXC-014","operator":"Suresh T.","seatbelt_status":"Fastened","proximity_status":"Worker Detected <10m","load_status":"Sensor Fault","idle_time_s":600,"alert_triggered":"Yes","alert_type":"Proximity Alert; Load Alert - Sensor Fault; Extended Idle Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Proximity Alert; Load Alert - Sensor Fault; Extended Idle Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT320-EXC-014","seatbelt_fastened":true,"nearest_object_m":4.5,"load_kg":null,"load_limit_kg":5000,"idle_seconds":600}},{"scenario_id":"SAFE-007","equipment_id":"CAT320-EXC-014","operator":"Meera S.","seatbelt_status":"Unfastened","proximity_status":"Obstacle Detected","load_status":"Underload","idle_time_s":300,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Proximity Alert; Extended Idle Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Proximity Alert; Extended Idle Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT320-EXC-014","seatbelt_fastened":false,"nearest_object_m":1.8,"load_kg":450,"load_limit_kg":5000,"idle_seconds":300}},{"scenario_id":"SAFE-008","equipment_id":"CAT315-EXC-009","operator":"Arjun P.","seatbelt_status":"Unfastened","proximity_status":"Vehicle Detected <5m","load_status":"Normal","idle_time_s":12,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Proximity Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Proximity Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT315-EXC-009","seatbelt_fastened":false,"nearest_object_m":2.4,"load_kg":3100,"load_limit_kg":5000,"idle_seconds":12}},{"scenario_id":"SAFE-009","equipment_id":"CAT320-EXC-015","operator":"Meera S.","seatbelt_status":"Unfastened","proximity_status":"Clear","load_status":"Underload","idle_time_s":300,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Extended Idle Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Extended Idle Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT320-EXC-015","seatbelt_fastened":false,"nearest_object_m":8.5,"load_kg":450,"load_limit_kg":5000,"idle_seconds":300}},{"scenario_id":"SAFE-010","equipment_id":"CAT320-EXC-015","operator":"Ravi K.","seatbelt_status":"Unfastened","proximity_status":"Worker Detected <10m","load_status":"Overload Warning","idle_time_s":30,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Proximity Alert; Load Alert - Overload Warning","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Proximity Alert; Load Alert - Overload Warning. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT320-EXC-015","seatbelt_fastened":false,"nearest_object_m":4.5,"load_kg":4850,"load_limit_kg":5000,"idle_seconds":30}},{"scenario_id":"SAFE-011","equipment_id":"CAT336-EXC-021","operator":"Karthik R.","seatbelt_status":"Unfastened","proximity_status":"Obstacle Detected","load_status":"Normal","idle_time_s":0,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Proximity Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Proximity Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT336-EXC-021","seatbelt_fastened":false,"nearest_object_m":1.8,"load_kg":3100,"load_limit_kg":5000,"idle_seconds":0}},{"scenario_id":"SAFE-012","equipment_id":"CAT320-EXC-014","operator":"Meera S.","seatbelt_status":"Fastened","proximity_status":"Clear","load_status":"Overload Warning","idle_time_s":600,"alert_triggered":"Yes","alert_type":"Load Alert - Overload Warning; Extended Idle Alert","severity":"Medium","expected_ui_behavior":"Status chip(s) turn amber for: Load Alert - Overload Warning; Extended Idle Alert. Logged in Safety tab.","telemetry":{"machine_id":"CAT320-EXC-014","seatbelt_fastened":true,"nearest_object_m":8.5,"load_kg":4850,"load_limit_kg":5000,"idle_seconds":600}},{"scenario_id":"SAFE-013","equipment_id":"CAT315-EXC-009","operator":"Arjun P.","seatbelt_status":"Unfastened","proximity_status":"Clear","load_status":"Overload Warning","idle_time_s":0,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Load Alert - Overload Warning","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Load Alert - Overload Warning. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT315-EXC-009","seatbelt_fastened":false,"nearest_object_m":8.5,"load_kg":4850,"load_limit_kg":5000,"idle_seconds":0}},{"scenario_id":"SAFE-014","equipment_id":"CAT320-EXC-015","operator":"Karthik R.","seatbelt_status":"Unfastened","proximity_status":"Obstacle Detected","load_status":"Overload Warning","idle_time_s":300,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Proximity Alert; Load Alert - Overload Warning; Extended Idle Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Proximity Alert; Load Alert - Overload Warning; Extended Idle Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT320-EXC-015","seatbelt_fastened":false,"nearest_object_m":1.8,"load_kg":4850,"load_limit_kg":5000,"idle_seconds":300}},{"scenario_id":"SAFE-015","equipment_id":"CAT315-EXC-009","operator":"Meera S.","seatbelt_status":"Unfastened","proximity_status":"Vehicle Detected <5m","load_status":"Sensor Fault","idle_time_s":300,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Proximity Alert; Load Alert - Sensor Fault; Extended Idle Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Proximity Alert; Load Alert - Sensor Fault; Extended Idle Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT315-EXC-009","seatbelt_fastened":false,"nearest_object_m":2.4,"load_kg":null,"load_limit_kg":5000,"idle_seconds":300}},{"scenario_id":"SAFE-016","equipment_id":"CAT320-EXC-014","operator":"Divya N.","seatbelt_status":"Fastened","proximity_status":"Worker Detected <10m","load_status":"Normal","idle_time_s":30,"alert_triggered":"Yes","alert_type":"Proximity Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Proximity Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT320-EXC-014","seatbelt_fastened":true,"nearest_object_m":4.5,"load_kg":3100,"load_limit_kg":5000,"idle_seconds":30}},{"scenario_id":"SAFE-017","equipment_id":"CAT320-EXC-015","operator":"Meera S.","seatbelt_status":"Fastened","proximity_status":"Clear","load_status":"Normal","idle_time_s":0,"alert_triggered":"No","alert_type":null,"severity":null,"expected_ui_behavior":"All status chips remain green. No action required.","telemetry":{"machine_id":"CAT320-EXC-015","seatbelt_fastened":true,"nearest_object_m":8.5,"load_kg":3100,"load_limit_kg":5000,"idle_seconds":0}},{"scenario_id":"SAFE-018","equipment_id":"CAT320-EXC-015","operator":"Karthik R.","seatbelt_status":"Fastened","proximity_status":"Vehicle Detected <5m","load_status":"Normal","idle_time_s":300,"alert_triggered":"Yes","alert_type":"Proximity Alert; Extended Idle Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Proximity Alert; Extended Idle Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT320-EXC-015","seatbelt_fastened":true,"nearest_object_m":2.4,"load_kg":3100,"load_limit_kg":5000,"idle_seconds":300}},{"scenario_id":"SAFE-019","equipment_id":"CAT330-EXC-030","operator":"Anitha V.","seatbelt_status":"Unfastened","proximity_status":"Worker Detected <10m","load_status":"Overload Warning","idle_time_s":600,"alert_triggered":"Yes","alert_type":"Seatbelt Alert; Proximity Alert; Load Alert - Overload Warning; Extended Idle Alert","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Seatbelt Alert; Proximity Alert; Load Alert - Overload Warning; Extended Idle Alert. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT330-EXC-030","seatbelt_fastened":false,"nearest_object_m":4.5,"load_kg":4850,"load_limit_kg":5000,"idle_seconds":600}},{"scenario_id":"SAFE-020","equipment_id":"CAT320-EXC-014","operator":"Meera S.","seatbelt_status":"Fastened","proximity_status":"Obstacle Detected","load_status":"Sensor Fault","idle_time_s":5,"alert_triggered":"Yes","alert_type":"Proximity Alert; Load Alert - Sensor Fault","severity":"Critical","expected_ui_behavior":"Status chip(s) turn red for: Proximity Alert; Load Alert - Sensor Fault. Supervisor notification dispatched.","telemetry":{"machine_id":"CAT320-EXC-014","seatbelt_fastened":true,"nearest_object_m":1.8,"load_kg":null,"load_limit_kg":5000,"idle_seconds":5}}],"idle":[{"scenario_id":"IDLE-001","equipment_id":"CAT315-EXC-009","idle_duration_s":480,"alert_threshold_s":180,"alert_triggered":"Yes","system_action":"Session flagged for review","expected_ui_behavior":"IDLE chip turns red, timer counts up in real time, logged to Analytics","telemetry":{"machine_id":"CAT315-EXC-009","idle_seconds":480}},{"scenario_id":"IDLE-002","equipment_id":"CAT320-EXC-014","idle_duration_s":650,"alert_threshold_s":60,"alert_triggered":"Yes","system_action":"Auto-logged idle period","expected_ui_behavior":"IDLE chip turns red, timer counts up in real time, logged to Analytics","telemetry":{"machine_id":"CAT320-EXC-014","idle_seconds":650}},{"scenario_id":"IDLE-003","equipment_id":"CAT320-EXC-015","idle_duration_s":480,"alert_threshold_s":180,"alert_triggered":"Yes","system_action":"Auto-logged idle period","expected_ui_behavior":"IDLE chip turns red, timer counts up in real time, logged to Analytics","telemetry":{"machine_id":"CAT320-EXC-015","idle_seconds":480}},{"scenario_id":"IDLE-004","equipment_id":"CAT320-EXC-015","idle_duration_s":150,"alert_threshold_s":120,"alert_triggered":"Yes","system_action":"Session flagged for review","expected_ui_behavior":"IDLE chip turns red, timer counts up in real time, logged to Analytics","telemetry":{"machine_id":"CAT320-EXC-015","idle_seconds":150}},{"scenario_id":"IDLE-005","equipment_id":"CAT315-EXC-009","idle_duration_s":480,"alert_threshold_s":120,"alert_triggered":"Yes","system_action":"No action - within threshold","expected_ui_behavior":"IDLE chip turns red, timer counts up in real time, logged to Analytics","telemetry":{"machine_id":"CAT315-EXC-009","idle_seconds":480}},{"scenario_id":"IDLE-006","equipment_id":"CAT330-EXC-030","idle_duration_s":150,"alert_threshold_s":60,"alert_triggered":"Yes","system_action":"Session flagged for review","expected_ui_behavior":"IDLE chip turns red, timer counts up in real time, logged to Analytics","telemetry":{"machine_id":"CAT330-EXC-030","idle_seconds":150}},{"scenario_id":"IDLE-007","equipment_id":"CAT330-EXC-030","idle_duration_s":45,"alert_threshold_s":60,"alert_triggered":"No","system_action":"No action - within threshold","expected_ui_behavior":"IDLE chip stays green/amber showing live seconds, no alert","telemetry":{"machine_id":"CAT330-EXC-030","idle_seconds":45}},{"scenario_id":"IDLE-008","equipment_id":"CAT320-EXC-015","idle_duration_s":10,"alert_threshold_s":60,"alert_triggered":"No","system_action":"No action - within threshold","expected_ui_behavior":"IDLE chip stays green/amber showing live seconds, no alert","telemetry":{"machine_id":"CAT320-EXC-015","idle_seconds":10}}],"training":[{"scenario_id":"TRAIN-001","operator":"Suresh T.","module":"Seatbelt Compliance","completion_status":"In Progress","score_pct":null,"due_in_days":3,"expected_ui_behavior":"Training tab shows amber progress ring"},{"scenario_id":"TRAIN-002","operator":"Divya N.","module":"Proximity Awareness","completion_status":"Overdue","score_pct":null,"due_in_days":30,"expected_ui_behavior":"Training tab shows red badge with 'Overdue' label, blocks Sim access until resolved"},{"scenario_id":"TRAIN-003","operator":"Ravi K.","module":"Load Limits & Handling","completion_status":"Overdue","score_pct":null,"due_in_days":-1,"expected_ui_behavior":"Training tab shows red badge with 'Overdue' label, blocks Sim access until resolved"},{"scenario_id":"TRAIN-004","operator":"Ravi K.","module":"Emergency Shutdown Procedure","completion_status":"Overdue","score_pct":null,"due_in_days":3,"expected_ui_behavior":"Training tab shows red badge with 'Overdue' label, blocks Sim access until resolved"},{"scenario_id":"TRAIN-005","operator":"Anitha V.","module":"Zone Grading Techniques","completion_status":"Not Started","score_pct":null,"due_in_days":0,"expected_ui_behavior":"Training tab shows grey 'Not Started' label"},{"scenario_id":"TRAIN-006","operator":"Anitha V.","module":"Machine Startup Checklist","completion_status":"Overdue","score_pct":null,"due_in_days":-1,"expected_ui_behavior":"Training tab shows red badge with 'Overdue' label, blocks Sim access until resolved"},{"scenario_id":"TRAIN-007","operator":"Karthik R.","module":"Fatigue & Idle Management","completion_status":"In Progress","score_pct":null,"due_in_days":-1,"expected_ui_behavior":"Training tab shows amber progress ring"},{"scenario_id":"TRAIN-008","operator":"Ravi K.","module":"Incident Reporting","completion_status":"Completed","score_pct":100.0,"due_in_days":14,"expected_ui_behavior":"Training tab shows green checkmark, certificate available for download"}],"analytics":[{"scenario_id":"ANLY-001","equipment_id":"CAT330-EXC-030","metric":"Fuel Efficiency (L/hr)","shift_value":88.3,"benchmark":12,"trend":"Up","expected_ui_behavior":"Analytics tab shows metric in green with upward trend arrow"},{"scenario_id":"ANLY-002","equipment_id":"CAT320-EXC-015","metric":"Cycle Time (min)","shift_value":94.0,"benchmark":85,"trend":"Flat","expected_ui_behavior":"Analytics tab shows metric in neutral grey with flat trend indicator"},{"scenario_id":"ANLY-003","equipment_id":"CAT320-EXC-015","metric":"Volume Moved (m3/shift)","shift_value":12.4,"benchmark":85,"trend":"Up","expected_ui_behavior":"Analytics tab shows metric in red with downward trend arrow, flagged below benchmark"},{"scenario_id":"ANLY-004","equipment_id":"CAT320-EXC-015","metric":"Idle Time Ratio (%)","shift_value":8.2,"benchmark":9,"trend":"Flat","expected_ui_behavior":"Analytics tab shows metric in red with downward trend arrow, flagged below benchmark"},{"scenario_id":"ANLY-005","equipment_id":"CAT320-EXC-015","metric":"Safety Incidents (count)","shift_value":2100.0,"benchmark":9,"trend":"Flat","expected_ui_behavior":"Analytics tab shows metric in neutral grey with flat trend indicator"},{"scenario_id":"ANLY-006","equipment_id":"CAT330-EXC-030","metric":"Utilization Rate (%)","shift_value":12.4,"benchmark":9,"trend":"Down","expected_ui_behavior":"Analytics tab shows metric in neutral grey with flat trend indicator"},{"scenario_id":"ANLY-007","equipment_id":"CAT320-EXC-015","metric":"Average Load Weight (kg)","shift_value":79.0,"benchmark":90,"trend":"Down","expected_ui_behavior":"Analytics tab shows metric in red with downward trend arrow, flagged below benchmark"},{"scenario_id":"ANLY-008","equipment_id":"CAT315-EXC-009","metric":"Shift Completion Rate (%)","shift_value":88.3,"benchmark":5,"trend":"Down","expected_ui_behavior":"Analytics tab shows metric in neutral grey with flat trend indicator"},{"scenario_id":"ANLY-009","equipment_id":"CAT336-EXC-021","metric":"Operator Score (0-100)","shift_value":320.0,"benchmark":0,"trend":"Down","expected_ui_behavior":"Analytics tab shows metric in neutral grey with flat trend indicator"}]}`);
+
+function scenariosFor(cat){
+  const cats = cat ? [cat] : Object.keys(SCENARIOS);
+  const out = [];
+  cats.forEach(c => (SCENARIOS[c]||[]).forEach(s => out.push(Object.assign({category:c}, s))));
+  return out;
+}
+function findScenario(id){ return scenariosFor().find(s=>s.scenario_id===id); }
+function scenarioLabel(s){
+  return s.alert_type || (s.task ? s.task+' — '+s.zone : null) || s.module || s.metric || s.system_action || s.scenario_id;
+}
+
+// Links out to a YouTube search rather than a specific fabricated video ID —
+// we can't verify a specific video exists/is accurate for each topic, so a
+// search result the operator can vet themselves is the honest option here.
+function ytSearchUrl(query){
+  return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(query);
+}
+
+const TRAINING_MANUAL = [
+  { problem: "Seatbelt chip stays red even after buckling in.",
+    solution: "Confirm the latch is fully seated — a partial click can still read as unfastened. If the chip doesn't clear within a few seconds, log it as a sensor/maintenance ticket rather than continuing to operate." },
+  { problem: "Proximity alert keeps triggering with nothing nearby.",
+    solution: "Dust, rain, or mud buildup on the sensor lens can cause false readings — wipe the sensor and retest. If it persists after cleaning, flag the machine for a sensor inspection before the next shift." },
+  { problem: "Idle timer resets to 0 unexpectedly.",
+    solution: "The idle counter only accumulates while the machine is stationary with the engine running and no load — any joystick movement resets it. This is expected behavior, not a fault." },
+  { problem: "Load alert fires even though the bucket doesn't look full.",
+    solution: "Load sensors read hydraulic pressure, not visual bucket fill — uneven or dense material can trigger a high reading early. Ease off and redistribute the load rather than overriding the alert." },
+  { problem: "Dashboard shows 'LOCAL SIM' instead of 'LIVE · SERVER'.",
+    solution: "The tablet isn't connected to the backend server — check the WiFi/network connection and confirm the server is running at the address configured for this device." },
+  { problem: "Work order progress bar hasn't moved in a while.",
+    solution: "Progress only updates when a completed segment is logged — confirm you're tapping 'Mark Progress' after finishing a section, not just relying on time elapsed." },
+  { problem: "Training module shows 'Overdue' but you already watched it.",
+    solution: "Completion only registers once the module's final quiz/checklist step is submitted — reopen it and confirm you reached the final screen, not just the video." },
+  { problem: "No slots showing under 'Book a Session'.",
+    solution: "All current slots may already be booked. Check back after the next shift change when new slots open, or ask your supervisor to add an ad-hoc session." }
+];
+
+function onScenarioCategoryChange(v){
+  state.scenarioCategory = v;
+  state.scenarioSelected = '';
+  state.scenarioResult = null;
+  render();
+}
+
+function runSelectedScenario(){
+  const list = scenariosFor(state.scenarioCategory || '');
+  const id = state.scenarioSelected || (list[0] && list[0].scenario_id);
+  if(id) runScenario(id);
+}
+
+function runScenario(id){
+  const s = findScenario(id);
+  if(!s) return;
+  state.scenarioSelected = id;
+
+  if(s.category === 'safety' || s.category === 'idle'){
+    applyTelemetryScenario(s);
+  } else if(s.category === 'workOrders'){
+    applyWorkOrderScenario(s);
+  } else if(s.category === 'training'){
+    state.scenarioTrainingLog.unshift(Object.assign({time:new Date().toLocaleTimeString()}, s));
+    state.scenarioTrainingLog = state.scenarioTrainingLog.slice(0,10);
+  } else if(s.category === 'analytics'){
+    state.scenarioAnalyticsLog.unshift(Object.assign({time:new Date().toLocaleTimeString()}, s));
+    state.scenarioAnalyticsLog = state.scenarioAnalyticsLog.slice(0,10);
+  }
+
+  state.scenarioResult = { id: s.scenario_id, msg: s.expected_ui_behavior || 'Scenario applied.' };
+  state.scenarioRuns.unshift({ id: s.scenario_id, category: s.category, time: new Date().toLocaleTimeString() });
+  state.scenarioRuns = state.scenarioRuns.slice(0,10);
+  save();
+  render();
+}
+
+// Safety/idle scenarios drive the same telemetry fields the hazard buttons
+// use, so the existing evaluate() rule engine (no changes needed) fires
+// real pill/banner/alert updates from scenario data.
+function applyTelemetryScenario(s){
+  const t = s.telemetry || {};
+  const SAFE_DEFAULTS = { seatbelt: true, proxDist: 12, loadKg: 2000 }; // matches state.telemetry's own initial values
+  let holdMs = 8000;
+
+  if(typeof t.seatbelt_fastened === 'boolean') state.telemetry.seatbelt = t.seatbelt_fastened;
+  if(typeof t.nearest_object_m === 'number') state.telemetry.proxDist = t.nearest_object_m;
+  if(typeof t.load_kg === 'number') state.telemetry.loadKg = t.load_kg;
+
+  if(s.category === 'idle' && typeof t.idle_seconds === 'number' && t.idle_seconds > 0){
+    state.telemetry.speed = 0;
+    state.telemetry.loadKg = 0;
+    state.idleSeconds = 0;
+    state.forceIdle = true;
+    holdMs = Math.max(t.idle_seconds*1000, 65000);
+    setTimeout(()=>{ state.forceIdle=false; render(); }, holdMs);
+  } else {
+    // Revert to a fixed safe baseline, not whatever proxDist happened to be a
+    // moment ago — that value could itself already be depressed by an earlier
+    // scenario run, which is what caused the proximity alert to "stick".
+    setTimeout(()=>{
+      state.telemetry.seatbelt = SAFE_DEFAULTS.seatbelt;
+      state.telemetry.proxDist = SAFE_DEFAULTS.proxDist;
+      state.telemetry.loadKg = SAFE_DEFAULTS.loadKg;
+      render();
+    }, holdMs);
+  }
+}
+
+// Work-order scenarios drive the real Dashboard-tab progress/milestone state
+// (same 25%-per-milestone rule bumpProgress() already uses).
+function applyWorkOrderScenario(s){
+  if(typeof s.percent_complete === 'number'){
+    state.progress = Math.max(0, Math.min(100, Math.round(s.percent_complete)));
+  }
+  state.milestones = state.milestones.map((m,i)=>{
+    const threshold = (i+1) * 25;
+    return Object.assign({}, m, { status: state.progress >= threshold ? 'done' : 'pending' });
+  });
+  const nextIdx = state.milestones.findIndex(m=>m.status==='pending');
+  if(nextIdx>=0) state.milestones[nextIdx].status = 'active';
+
+  state.workOrderStatus = s.status || null;
+  state.workOrderTitle = (s.task && s.zone) ? (s.task+' — '+s.zone) : null;
+  state.workOrderEtaOverride = (typeof s.est_remaining_min === 'number') ? s.est_remaining_min : null;
+}
+
+// Maps a scenario's free-text `status` column to the bar/badge color the
+// spreadsheet's expected_ui_behavior describes (e.g. "Progress bar amber/yellow").
+function workOrderStatusColor(status){
+  if(!status) return 'var(--yellow)';
+  const s = status.toLowerCase();
+  if(s.includes('complete')) return 'var(--ok)';
+  if(s.includes('ahead')) return 'var(--ok)';
+  if(s.includes('blocked')) return 'var(--crit)';
+  if(s.includes('delayed')) return 'var(--warn)';
+  if(s.includes('just started')) return 'var(--muted)';
+  return 'var(--yellow)'; // "On Track" and anything unmapped
+}
+function fmtMinutes(mins){
+  const h = Math.floor(mins/60), m = Math.round(mins%60);
+  return h+"h "+m+"m";
+}
+
+/* ============ ANOMALY RULES ============ */
+function evaluate(t){
+  const flags=[];
+  if(t.rpm>800 && t.speed<0.5 && t.loadKg<200){
+    state.idleSeconds+=1.5;
+    if(state.idleSeconds>60 && state.idleSeconds<62) flags.push({cat:"idle",sev:"MEDIUM",msg:"Excessive idling detected ("+Math.floor(state.idleSeconds)+"s)"});
+  } else { state.idleSeconds=0; }
+
+  if(t.loadKg > t.loadLimit*0.95 && t.loadKg<=t.loadLimit)
+    flags.push({cat:"load",sev:"HIGH",msg:"Load near limit ("+t.loadKg+"kg)"});
+  if(t.loadKg > t.loadLimit)
+    flags.push({cat:"load",sev:"CRITICAL",msg:"Load limit exceeded ("+t.loadKg+"kg)"});
+
+  if(t.proxDist < 3) flags.push({cat:"proximity",sev:"CRITICAL",msg:"Personnel "+t.proxDist.toFixed(1)+"m rear-left"});
+  else if(t.proxDist < 6) flags.push({cat:"proximity",sev:"MEDIUM",msg:"Object "+t.proxDist.toFixed(1)+"m nearby"});
+
+  if(!t.seatbelt) flags.push({cat:"seatbelt",sev:"HIGH",msg:"Seatbelt not fastened"});
+
+  return flags;
+}
+
+/* ============ SIMULATOR TICK ============ */
+function tick(){
+  if(!state.simRunning) return;
+  state.tick++;
+  state.shiftSeconds += 1.5;
+  const t = state.telemetry;
+  if(state.forceIdle){
+    t.speed = 0; t.loadKg = 0; t.rpm = 900 + Math.random()*100;
+  } else {
+    t.speed = Math.max(0, t.speed + (Math.random()-0.5)*2);
+    if(t.speed>20) t.speed=20;
+    t.rpm = 1000 + Math.random()*600;
+    if(state.tick % 12 === 0){ t.loadKg = 1500 + Math.random()*2000; }
+  }
+  t.proxDist = Math.max(0.5, t.proxDist + (Math.random()-0.5)*1.5);
+  if(t.proxDist>15) t.proxDist=15;
+
+  const flags = evaluate(t);
+  const crit = flags.find(f=>f.sev==="CRITICAL") || flags.find(f=>f.sev==="HIGH");
+  state.activeAlert = crit || null;
+  if(flags.length){
+    flags.forEach(f=> state.alerts.unshift({...f, time:new Date().toLocaleTimeString()}) );
+    state.alerts = state.alerts.slice(0,30);
+  }
+
+  renderStrip();
+  if(currentTab === 'sim'){
+    // Targeted update only — never replaces #content's innerHTML while on the
+    // Sim tab, so an open Scenario Library dropdown stays open through ticks.
+    renderSimLive();
+  } else if(currentTab === 'train'){
+    // Nothing in the Training tab's content depends on the telemetry tick at
+    // all — skip the rebuild entirely. Otherwise every 1.5s tick was wiping
+    // the calendar/note inputs and snapping any open manual entry shut,
+    // which is exactly the "closes itself after a few seconds" bug.
+  } else {
+    document.getElementById('content').innerHTML = tabs[currentTab]();
+  }
+}
+setInterval(tick, 1500);
+
+/* ============ PERSISTENCE (per-viewer, localStorage) ============ */
+function save(){
+  try{
+    localStorage.setItem('soa_progress', JSON.stringify(state.progress));
+    localStorage.setItem('soa_milestones', JSON.stringify(state.milestones));
+    localStorage.setItem('soa_incidents', JSON.stringify(state.incidents));
+    localStorage.setItem('soa_bookings', JSON.stringify(state.bookings));
+    localStorage.setItem('soa_role', state.role);
+  }catch(e){ /* storage unavailable — demo still works, just won't persist */ }
+}
+function load(){
+  try{
+    const p = localStorage.getItem('soa_progress'); if(p!==null) state.progress = JSON.parse(p);
+    const m = localStorage.getItem('soa_milestones'); if(m) state.milestones = JSON.parse(m);
+    const i = localStorage.getItem('soa_incidents'); if(i) state.incidents = JSON.parse(i);
+    const b = localStorage.getItem('soa_bookings'); if(b) state.bookings = JSON.parse(b);
+    const r = localStorage.getItem('soa_role'); if(r) state.role = r;
+  }catch(e){}
+}
+
+/* ============ ROLE (stand-in for auth) ============ */
+function setRole(role){
+  state.role = role;
+  save();
+  applyRoleVisibility();
+  render();
+}
+function applyRoleVisibility(){
+  document.getElementById('roleSelect').value = state.role;
+  const simBtn = document.querySelector('#nav button[data-tab="sim"]');
+  const canSeeSim = state.role === 'supervisor';
+  simBtn.style.display = canSeeSim ? '' : 'none';
+  if(!canSeeSim && currentTab === 'sim'){ currentTab='dash'; document.querySelector('#nav button[data-tab="dash"]').click(); }
+}
+function injectProximity(){ state.telemetry.proxDist = 2.2; }
+function injectSeatbelt(){ state.telemetry.seatbelt = false; setTimeout(()=>{state.telemetry.seatbelt=true; render();},8000); }
+function injectIdle(){
+  state.telemetry.speed=0; state.telemetry.loadKg=0; state.idleSeconds=0;
+  state.forceIdle=true;
+  setTimeout(()=>{ state.forceIdle=false; render(); }, 90000);
+}
+function injectLoad(){ state.telemetry.loadKg = state.telemetry.loadLimit + 400; }
+function toggleSim(){ state.simRunning = !state.simRunning; render(); }
+function bumpProgress(){
+  state.progress = Math.min(100, state.progress+8);
+  const next = state.milestones.find(m=>m.status==="active");
+  if(next && state.progress>=((state.milestones.indexOf(next)+1)*25)){
+    next.status="done";
+    const upcoming = state.milestones.find(m=>m.status==="pending");
+    if(upcoming) upcoming.status="active";
+  }
+  save();
+  render();
+}
+
+/* ============ INCIDENT LOGGING ============ */
+function selectTag(tag, el){
+  state.selectedTag = tag;
+  document.querySelectorAll('.tag').forEach(e=>e.classList.remove('sel'));
+  el.classList.add('sel');
+}
+function logIncident(type){
+  state.incidents.unshift({
+    type, tag: state.selectedTag || "unspecified",
+    time: new Date().toLocaleTimeString()
+  });
+  state.selectedTag = null;
+  save();
+  render();
+}
+function bookSlot(id){
+  const slot = state.trainerSlots.find(s=>s.id===id);
+  if(!slot || slot.booked) return;
+  slot.booked = true;
+  const booking = {slotLabel:slot.label, time:slot.time, bookedAt:new Date().toLocaleString(), atMs: slot.atMs};
+  state.bookings.unshift(booking);
+  save();
+  scheduleReminder(booking);
+  render();
+}
+
+// Lets the operator request a session at a time of their own choosing,
+// instead of only picking from the fixed instructor/peer slots above.
+function requestCustomSession(){
+  const timeInput = document.getElementById('customSessionTime');
+  const noteInput = document.getElementById('customSessionNote');
+  if(!timeInput || !timeInput.value) return;
+  const atMs = new Date(timeInput.value).getTime();
+  if(isNaN(atMs)) return;
+  const note = (noteInput && noteInput.value.trim()) || '';
+  const inPast = atMs <= Date.now();
+  const booking = {
+    slotLabel: 'Requested Session' + (note ? ' — '+note : ''),
+    time: new Date(atMs).toLocaleString() + (inPast ? ' (already passed — no reminder set)' : ''),
+    bookedAt: new Date().toLocaleString(),
+    atMs,
+    custom: true
+  };
+  state.bookings.unshift(booking);
+  save();
+  if(!inPast) scheduleReminder(booking);
+  timeInput.value = '';
+  if(noteInput) noteInput.value = '';
+  render();
+}
+
+// Fires an in-app (and, if permitted, a native browser) reminder exactly at
+// the booked time. This only works while the tab stays open — there's no
+// backend/service worker here to deliver it if the browser is fully closed —
+// so on every page load we also re-schedule reminders for any booking whose
+// time hasn't passed yet (see the bottom of this script).
+function scheduleReminder(booking){
+  if(typeof booking.atMs !== 'number') return;
+  const delay = booking.atMs - Date.now();
+  if(delay <= 0) return;
+  setTimeout(()=>{
+    state.sessionReminder = { label: booking.slotLabel, time: booking.time };
+    if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
+      try{ new Notification('Session starting now', { body: booking.slotLabel }); }catch(e){}
+    }
+    render();
+  }, Math.min(delay, 2147480000)); // clamp to setTimeout's ~24.8-day practical max
+}
+
+function dismissReminder(){
+  state.sessionReminder = null;
+  render();
+}
+
+/* ============ ETA CALC ============ */
+function eta(){
+  const remaining = 100 - state.progress;
+  const baseRateUnitsPerMin = 0.7; // % per minute, illustrative
+  const hoursIn = state.shiftSeconds/3600;
+  const fatigue = hoursIn>6 ? 0.85 : 1.0;
+  const mins = Math.max(0, remaining / (baseRateUnitsPerMin*fatigue));
+  const h = Math.floor(mins/60), m = Math.round(mins%60);
+  return h+"h "+m+"m";
+}
+
+/* ============ RENDER ============ */
+function fmtClock(sec){
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=Math.floor(sec%60);
+  return [h,m,s].map(v=>String(v).padStart(2,'0')).join(':');
+}
+
+// Updates only the tick-dependent bits of the Sim tab (the live telemetry
+// dump + idle countdown) in place, without touching document.getElementById
+// ('content').innerHTML — so an open <select> (e.g. the Scenario Library
+// dropdown) is never destroyed out from under the user by the 1.5s tick.
+function renderSimLive(){
+  const liveFrame = document.getElementById('liveFrame');
+  if(liveFrame) liveFrame.textContent = JSON.stringify(state.telemetry, null, 2);
+
+  const idleBtn = document.getElementById('idleInjectBtn');
+  if(idleBtn) idleBtn.textContent = 'Excess Idle' + (state.forceIdle ? ' (running… '+Math.floor(state.idleSeconds)+'s)' : '');
+
+  const idleNote = document.getElementById('idleNote');
+  if(idleNote) idleNote.style.display = state.forceIdle ? '' : 'none';
+  const idleNoteVal = document.getElementById('idleNoteVal');
+  if(idleNoteVal) idleNoteVal.textContent = Math.floor(state.idleSeconds) + 's';
+}
+
+function renderStrip(){
+  const t = state.telemetry;
+  const sb = document.getElementById('seatbeltPill');
+  sb.className = 'pill' + (!t.seatbelt ? ' alert' : '');
+  const px = document.getElementById('proxPill');
+  px.className = 'pill' + (t.proxDist<6 ? ' alert' : '');
+  const ld = document.getElementById('loadPill');
+  ld.className = 'pill' + (t.loadKg>t.loadLimit*0.95 ? ' alert' : '');
+  const idlePill = document.getElementById('idlePill');
+  idlePill.className = 'pill' + (state.idleSeconds>60 ? ' alert' : '');
+  idlePill.innerHTML = '<span class="dot"></span>IDLE '+Math.floor(state.idleSeconds)+'s';
+  document.getElementById('shiftClock').textContent = fmtClock(state.shiftSeconds);
+
+  const banner = document.getElementById('alertBanner');
+  if(state.activeAlert){
+    banner.textContent = "⚠ "+state.activeAlert.msg;
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
+}
+
+function tabDash(){
+  const barColor = workOrderStatusColor(state.workOrderStatus);
+  const title = state.workOrderTitle || "Today's Work Order — Grading, Zone C";
+  const etaText = state.workOrderEtaOverride != null ? fmtMinutes(state.workOrderEtaOverride) : eta();
+  return `
+  <div class="card">
+    <h3>${title}</h3>
+    <div class="progress-outer"><div class="progress-inner" style="width:${state.progress}%;background:${barColor};"></div></div>
+    <div style="margin-top:6px;font-size:13px;color:var(--muted)">${state.progress}% complete${state.workOrderStatus?` · <b style="color:${barColor}">${state.workOrderStatus}</b>`:''} · Est. remaining: <b style="color:var(--yellow)">${etaText}</b></div>
+  </div>
+  <div class="card">
+    <h3>Shift Milestones</h3>
+    ${state.milestones.map(m=>`<div class="milestone ${m.status==='done'?'done':m.status==='active'?'active':''}"><span class="mk"></span>${m.label}</div>`).join('')}
+    <div style="margin-top:12px;"><button class="btn" onclick="bumpProgress()">MARK PROGRESS</button></div>
+  </div>`;
+}
+
+function tabSafety(){
+  const t = state.telemetry;
+  return `
+  <div class="card">
+    <div class="grid2">
+      <div class="stat"><span>Seatbelt</span><b style="color:${t.seatbelt?'var(--ok)':'var(--crit)'}">${t.seatbelt?'FASTENED':'UNFASTENED'}</b></div>
+      <div class="stat"><span>Nearest object</span><b>${t.proxDist.toFixed(1)} m</b></div>
+      <div class="stat"><span>Engine RPM</span><b>${Math.round(t.rpm)}</b></div>
+      <div class="stat"><span>Hydraulic load</span><b>${Math.round(t.loadKg)} / ${t.loadLimit} kg</b></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Log an Event</h3>
+    <div class="tags">
+      ${["Struck object","Slip/trip","Visibility","Equipment fault","Other"].map(tag=>`<span class="tag" onclick="selectTag('${tag}',this)">${tag}</span>`).join('')}
+    </div>
+    <div class="row" style="margin-top:14px;">
+      ${state.role==='operator' ? `
+        <button class="btn secondary" onclick="logIncident('Near-miss')">LOG NEAR-MISS</button>
+        <button class="btn crit" onclick="logIncident('Incident')">LOG INCIDENT</button>
+      ` : `<div class="logline">Supervisors view logs but don't file them — switch to Operator to log an event.</div>`}
+    </div>
+  </div>
+  <div class="card">
+    <h3>Recent Log Entries</h3>
+    ${state.incidents.length? state.incidents.slice(0,6).map(i=>`<div class="logline">${i.time} — <b>${i.type}</b> · ${i.tag}</div>`).join('') : '<div class="logline">No entries this shift.</div>'}
+  </div>`;
+}
+
+function tabTrain(){
+  const mods=[
+    ["Seatbelt policy","2 min","excavator operator seatbelt safety training"],
+    ["Idle reduction basics","4 min","reduce engine idling heavy equipment operator"],
+    ["Hydraulic load limits","3 min left","excavator hydraulic load limit safety training"],
+    ["Bucket attach checklist","guide","excavator bucket attachment checklist safety"]
+  ];
+  const ytLink = q => `<a href="${ytSearchUrl(q)}" target="_blank" rel="noopener" style="color:var(--yellow);text-decoration:none;white-space:nowrap;">▶ YouTube</a>`;
+  return `
+  ${state.sessionReminder?`
+  <div class="card" style="border:1px solid var(--yellow);">
+    <h3>🔔 Session Reminder</h3>
+    <div style="font-size:14px;">Your session is starting now: <b style="color:var(--yellow)">${state.sessionReminder.label}</b> — ${state.sessionReminder.time}</div>
+    <div class="row" style="margin-top:10px;"><button class="btn small secondary" onclick="dismissReminder()">DISMISS</button></div>
+  </div>`:''}
+  <div class="card">
+    <h3>Continue Learning</h3>
+    <div class="module"><span>Hydraulic Load Limits</span><span class="dur">3 min left ▶ &nbsp;${ytLink('excavator hydraulic load limit safety training')}</span></div>
+  </div>
+  <div class="card">
+    <h3>Bite-Sized Modules</h3>
+    ${mods.map(m=>`<div class="module"><span>${m[0]}</span><span class="dur">${m[1]} &nbsp;${ytLink(m[2])}</span></div>`).join('')}
+  </div>
+  <div class="card">
+    <h3>Troubleshooting Manual</h3>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 10px;">Tap a problem to see the fix.</p>
+    ${TRAINING_MANUAL.map(e=>`
+      <details style="margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:8px;">
+        <summary style="cursor:pointer;color:var(--text);font-size:14px;">${e.problem}</summary>
+        <div style="margin-top:6px;font-size:13px;color:var(--muted);">${e.solution}</div>
+      </details>`).join('')}
+  </div>
+  <div class="card">
+    <h3>Book a Session</h3>
+    ${state.trainerSlots.filter(s=>!s.booked).map(s=>`
+      <div class="module"><span>${s.label}<br><span class="dur">${s.time}</span></span>
+      <button class="btn small" onclick="bookSlot(${s.id})">BOOK</button></div>`).join('') || '<div class="logline">No open slots — all booked.</div>'}
+  </div>
+  <div class="card">
+    <h3>Book at Your Own Free Time</h3>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 10px;">Don't see a slot that works? Request a session for whenever you're actually free — we'll remind you when it starts.</p>
+    <div class="row">
+      <input id="customSessionTime" type="datetime-local" style="background:var(--card2,#1b1f27);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px;">
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <input id="customSessionNote" type="text" placeholder="Optional note (e.g. topic, instructor preference)" style="flex:1;background:var(--card2,#1b1f27);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px;">
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn" onclick="requestCustomSession()">REQUEST SESSION</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Your Bookings</h3>
+    ${state.bookings.length? state.bookings.map(b=>`<div class="logline"><b>${b.slotLabel}</b> · ${b.time}${typeof b.atMs==='number' && b.atMs>Date.now() ? ' · <span style="color:var(--yellow)">reminder set</span>' : ''}</div>`).join('') : '<div class="logline">No sessions booked yet.</div>'}
+  </div>
+  ${state.scenarioTrainingLog.length?`
+  <div class="card">
+    <h3>Scenario Test Results</h3>
+    ${state.scenarioTrainingLog.map(s=>`<div class="logline">${s.time} — <b>${s.module}</b> · ${s.completion_status}${s.score_pct!=null?' ('+s.score_pct+'%)':''} · ${s.expected_ui_behavior}</div>`).join('')}
+  </div>`:''}`;
+}
+
+function tabAnalytics(){
+  const idleFlags = state.alerts.filter(a=>a.cat==='idle').length;
+  const aggFlags = state.alerts.filter(a=>a.cat==='proximity').length;
+  const loadFlags = state.alerts.filter(a=>a.cat==='load').length;
+  const maxH = Math.max(...state.history.idle,1);
+  return `
+  <div class="card">
+    <h3>This Shift</h3>
+    <div class="stat"><span>Idle-time flags</span><b>${idleFlags}</b></div>
+    <div class="stat"><span>Proximity flags</span><b>${aggFlags}</b></div>
+    <div class="stat"><span>Load warnings</span><b>${loadFlags}</b></div>
+  </div>
+  <div class="card">
+    <h3>Idle Minutes — Last 7 Shifts</h3>
+    <div class="bar">${state.history.idle.map(v=>`<div style="height:${(v/maxH)*100}%" title="${v}m"></div>`).join('')}</div>
+  </div>
+  <div class="card">
+    <h3>Flagged Event Log</h3>
+    ${state.alerts.length? state.alerts.slice(0,8).map(a=>`<div class="logline">${a.time} — <b>${a.sev}</b> · ${a.msg}</div>`).join('') : '<div class="logline">No flags yet — trigger one from the Sim tab.</div>'}
+  </div>
+  ${state.scenarioAnalyticsLog.length?`
+  <div class="card">
+    <h3>Scenario Metrics</h3>
+    ${state.scenarioAnalyticsLog.map(s=>`<div class="logline">${s.time} — <b>${s.metric}</b>: ${s.shift_value} (benchmark ${s.benchmark}, trend ${s.trend}) · ${s.expected_ui_behavior}</div>`).join('')}
+  </div>`:''}`;
+}
+
+function tabSim(){
+  const cat = state.scenarioCategory || '';
+  const list = scenariosFor(cat);
+  if(!list.find(s=>s.scenario_id===state.scenarioSelected)) state.scenarioSelected = (list[0]||{}).scenario_id || '';
+  const catOption = (val,label) => `<option value="${val}" ${cat===val?'selected':''}>${label}</option>`;
+
+  return `
+  <div class="card">
+    <h3>Telemetry Stream</h3>
+    <div class="row">
+      <button class="btn ${state.simRunning?'':'secondary'}" onclick="toggleSim()">${state.simRunning?'● RUNNING — tap to pause':'○ PAUSED — tap to run'}</button>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Inject Events</h3>
+    <div class="row">
+      <button class="btn secondary" onclick="injectProximity()">Proximity Hazard</button>
+      <button class="btn secondary" onclick="injectSeatbelt()">Seatbelt Unbuckle</button>
+      <button class="btn secondary" id="idleInjectBtn" onclick="injectIdle()">Excess Idle${state.forceIdle?' (running… '+Math.floor(state.idleSeconds)+'s)':''}</button>
+      <button class="btn secondary" onclick="injectLoad()">Overload</button>
+    </div>
+    <div id="idleNote" style="margin-top:10px;font-size:13px;color:var(--muted);${state.forceIdle?'':'display:none;'}">Idle timer needs 60s continuous idle to flag — currently at <b style="color:var(--yellow)" id="idleNoteVal">${Math.floor(state.idleSeconds)}s</b>.</div>
+  </div>
+  <div class="card">
+    <h3>Scenario Library</h3>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 10px;">Run one of 57 synthetic test scenarios (safety, idle, work order, training, analytics) instead of a single hazard.</p>
+    <div class="row">
+      <select id="scenarioCategory" onchange="onScenarioCategoryChange(this.value)">
+        ${catOption('','All categories ('+scenariosFor().length+')')}
+        ${catOption('safety','Safety ('+SCENARIOS.safety.length+')')}
+        ${catOption('idle','Idle ('+SCENARIOS.idle.length+')')}
+        ${catOption('workOrders','Work Order ('+SCENARIOS.workOrders.length+')')}
+        ${catOption('training','Training ('+SCENARIOS.training.length+')')}
+        ${catOption('analytics','Analytics ('+SCENARIOS.analytics.length+')')}
+      </select>
+      <select id="scenarioSelect" onchange="state.scenarioSelected=this.value">
+        ${list.map(s=>`<option value="${s.scenario_id}" ${state.scenarioSelected===s.scenario_id?'selected':''}>${s.scenario_id} — ${scenarioLabel(s)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn" onclick="runSelectedScenario()">RUN SCENARIO</button>
+    </div>
+    ${state.scenarioResult?`<div style="margin-top:10px;font-size:13px;"><b style="color:var(--yellow)">${state.scenarioResult.id}</b> — ${state.scenarioResult.msg}</div>`:''}
+    ${state.scenarioRuns.length?`<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:6px;">${state.scenarioRuns.slice(0,5).map(r=>`<div class="logline">${r.time} — <b>${r.id}</b> · ${r.category}</div>`).join('')}</div>`:''}
+  </div>
+  <div class="card">
+    <h3>Live Frame</h3>
+    <pre id="liveFrame" style="white-space:pre-wrap;font-size:12px;color:var(--muted);margin:0;">${JSON.stringify(state.telemetry,null,2)}</pre>
+  </div>`;
+}
+
+const tabs = {dash:tabDash, safety:tabSafety, train:tabTrain, analytics:tabAnalytics, sim:tabSim};
+let currentTab = 'dash';
+
+function render(){
+  renderStrip();
+  document.getElementById('content').innerHTML = tabs[currentTab]();
+}
+
+document.getElementById('nav').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-tab]');
+  if(!btn) return;
+  currentTab = btn.dataset.tab;
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+});
+
+load();
+// setTimeout doesn't survive a page reload, so any reminder for a booking
+// made in an earlier session needs to be re-armed here, once, at boot.
+state.bookings.forEach(b => { if(typeof b.atMs === 'number' && b.atMs > Date.now()) scheduleReminder(b); });
+applyRoleVisibility();
+render();
+</script>
+</body>
+</html>
